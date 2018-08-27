@@ -1,0 +1,615 @@
+---
+title: "Teradata"
+author: "Nikhil Bhatewara"
+date: "April 25, 2018"
+output: 
+  html_document: 
+    fig_height: 9
+    fig_width: 9
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,out.width='\\textwidth',fig.height=6,fig.align='center')
+```
+
+## work space
+
+```{r,opts_chunk$set(out.width='\\textwidth',fig.height=8,fig.align='center')}
+### Import libraries
+library("plyr")
+require("stats")
+require("ggplot2")
+library("stringdist")
+library("dplyr")
+library("stringr")
+#require("scales")
+workingdirectory <- "D:\\e\\Osu\\Spring 2018\\R_python\\teradata\\working\\cleandata"
+#workingdirectory="C:\\Users\\msis5223user\\Documents\\teradata_nikhil"
+setwd(workingdirectory)
+eventsbike_clean <- read.csv("eventsbike_clean.csv")
+#summary(eventsbike_clean)
+eventsbike_clean <- subset(eventsbike_clean, select = -c(X))
+
+
+
+
+eventsbike_clean[,c(3,4,13,14,27,28,29,21)] <- sapply(eventsbike_clean[,c(3,4,13,14,27,28,29,21)],tolower)
+
+
+```
+- Creating a column "Goal_Achieved" which represents % of goal achieved in each event
+
+```{r}
+df0 <- eventsbike_clean[order(-eventsbike_clean$Total_of_All_Confirmed_Gifts),]
+df0$Goal_Achieved<-ifelse(df0$Event_Goal==0, 101, (100*(df0$Total_of_All_Confirmed_Gifts/df0$Event_Goal)))
+```
+Extracting those events which achieved target goal by more than 80%, excluding those events which have goal events < 1 
+
+```{r}
+morethan80percent <- (df0$Goal_Achieved > 80 & df0$Event_Goal>1 )
+top80events <- df0[morethan80percent,c(2, 7,11,33)]
+
+```
+Similarly extracting those events which did not perform well , target goal achieved less than 30%
+```{r}
+lessthan30percent <- (df0$Goal_Achieved < 30 & df0$Event_Goal>1 )
+worst30events <- df0[lessthan30percent,c(2, 7,11,33)]
+
+```
+# Analysis on TOP 80% STATES
+
+```{r}
+df1 <- df0[df0$Event_ID %in% top80events$Event_ID,c(1,2,27,28,29,30,33)]
+
+```
+- TOP 5 STATES BY NUMBER OF EVENTS HAVING > 80 % GOAL ACHIEVED
+
+```{r}
+temp1<-plyr::count(df1,"State")
+#head(temp1[order(-temp1$freq),],n=5)
+ga7 <- (ggplot(temp1,aes(x=reorder(State,-freq),y=freq))+geom_bar(stat='identity',fill='green') + theme_classic())
+
+ga7 + labs(y = "Average Number of Events",x="States",title="Distribution of Number of Events for each state",subtitle="For Top 20% events (Fundraising goal achieved by more than 80%)",caption="Based on data from events file") +guides(fill=FALSE)
+```
+
+- TOP 5 STATES BY AVERAGE % GOAL ACHIEVED
+
+```{r}
+temp2 <- aggregate(Goal_Achieved~State,data=df1,mean)
+#head(temp2[order(-temp2$Goal_Achieved),],n=5)
+ga8 <- (ggplot(temp2,aes(x=reorder(State,-Goal_Achieved),y=Goal_Achieved))+geom_bar(stat='identity',fill='green') + theme_classic())
+
+ga8 + labs(y = "Goal achieved (in %)",x="States",title="Distribution of Goal achieved by each state",subtitle="For Top 20% events (Fundraising goal achieved by more than 80%)",caption="Based on data from events file") +guides(fill=FALSE)
+```
+
+TX,NY,MN,PA,OH,MI,ID,KS,MA are best performing states and should be retained.
+
+Invest more on less performing states
+
+# Analysis on BOTTOM 30% STATES
+
+```{r}
+df2 <- df0[df0$Event_ID %in% worst30events$Event_ID,c(1,2,28,29,30,33)]
+```
+
+- TOP 5 STATES BY NUMBER OF EVENTS HAVING < 30 % GOAL ACHIEVED
+
+```{r}
+temp3<-plyr::count(df2,"State")
+#head(temp3[order(-temp3$freq),],n=5)
+
+ga9 <- (ggplot(temp3,aes(x=reorder(State,-freq),y=freq))+geom_bar(stat='identity',fill='red') + theme_classic())
+
+ga9 + labs(y = "Average Number of Events",x="States",title="Distribution of Number of Events for each state",subtitle="For bottom 30% events based on goal achieved",caption="Based on data from events file") +guides(fill=FALSE)
+
+```
+
+- TOP 5 STATES BY AVERAGE % GOAL ACHIEVED 
+
+```{r}
+temp4 <- aggregate(Goal_Achieved~State,data=df2,mean)
+#head(temp4[order(-temp4$Goal_Achieved),],n=5)
+
+ga10 <- (ggplot(temp4[1:30,],aes(x=reorder(State,-Goal_Achieved),y=Goal_Achieved))+geom_bar(stat='identity',fill='red') + theme_classic())
+
+ga10 + labs(y = "Goal achieved (in %)",x="States",title="Distribution of Goal achieved by each state",subtitle="For bottom 30% events based on goal achieved",caption="Based on data from events file") +guides(fill=FALSE)
+```
+
+NY,PA,CO,MD,OH,IA,NV,WY are not performing well and hence decision decision should be made whether to invest or not
+
+## Notice that NY,PA,OH are part of both list. So these have both successfull events as well as failed events. Reallocate these resources to top 80%
+
+
+# TOP event ids from top80perc events
+```{r}
+top80eventsdf <- df0[df0$Event_ID %in% top80events$Event_ID, ]
+```
+# import teams data
+```{r}
+teamsbike_clean= read.csv("teamsbike_clean.csv")
+#summary(teamsbike_clean)
+teamsbike_clean <- subset(teamsbike_clean, select = -c(X))
+teamsbike_clean[, c(2, 5, 8, 9, 10, 11, 21, 22)] = sapply(teamsbike_clean[, c(2, 5, 8, 9, 10, 11, 21, 22)], tolower)
+
+```
+
+- Create df3 containing event ids of top80% events
+
+```{r}
+df3 <- teamsbike_clean[teamsbike_clean$Event_ID %in% top80events$Event_ID,]
+```
+
+- Count no of participants in each fiscal year for top 80% events
+
+```{r}
+temp5 <- aggregate(Number_of_Participants~Fiscal_Year,data=df3,FUN=length)
+ggplot(temp5,aes(x=Fiscal_Year,y=Number_of_Participants))+geom_bar(stat='identity',fill='blue') + theme_classic()
+```
+# No of participants for top 80% goal achieving events are decreasing 
+
+
+- count no of participants of each fiscal year for all the events
+
+```{r}
+
+temp50 <- aggregate(Number_of_Participants~Fiscal_Year,data=teamsbike_clean,FUN=length)
+pt <- (ggplot(temp50,aes(x=Fiscal_Year,y=Number_of_Participants))+geom_bar(stat='identity',fill='yellow') + theme_classic()) 
+pt + labs(x = "Fiscal Year",title="Distribution of  participants per year",subtitle="For all events",caption="Based on data from teamsbike") +scale_x_continuous(breaks=pretty(teamsbike_clean$Fiscal_Year, n = 6))
+```
+
+
+
+
+
+
+
+- Create df4 containing event ids of worst30% events
+
+```{r}
+df4 <- teamsbike_clean[teamsbike_clean$Event_ID %in% worst30events$Event_ID,]
+```
+
+- Count no of participants in each fiscal year for worst 30% events
+
+```{r}
+temp6 <- aggregate(Number_of_Participants~Fiscal_Year,data=df4,FUN=length)
+ggplot(temp6,aes(x=Fiscal_Year,y=Number_of_Participants))+geom_bar(stat='identity',fill='cyan') + theme_classic()
+```
+
+
+# Mouth publicity is more effective
+
+```{r}
+
+temp9<-plyr::count(teamsbike_clean,"Team_Division")
+(head(temp9[order(-temp9$freq),],n=25))
+
+```
+
+# Analysis on Companies
+
+- Finding companies which have most participation on top80p events and btm30p events. Then extracting those companies which are present in both. Those companies have growth opportunity
+
+```{r}
+temp7<-plyr::count(df3,"Company")
+lessthan20_top80p <- temp7[temp7$freq < 20,]
+temp8<-plyr::count(df4,"Company")
+lessthan20_btm30p <- temp8[temp8$freq < 20,]
+temp10 <- lessthan20_top80p[lessthan20_top80p$Company %in% lessthan20_btm30p$Company,]
+dim(temp10)
+```
+
+- Lets remove somellp since it is not useful
+```{r}
+temp10 <- temp10[!(temp10$Company == 'some llp'),]
+unique(temp10$Company)
+```
+- Now we have companies which has potential to grow, so lets extract their details from original teams dataset
+
+```{r}
+temp11 <-   teamsbike_clean$Company %in% temp10$Company   
+temp12 <- teamsbike_clean[temp11,]
+#colnames(temp12)
+```
+
+- Now we want to check if number fof participants in there companies are incereasing or decreasing, so we will aggregate the number of participants w.r.t comapny and fiscal year
+
+```{r}
+temp13 <- aggregate(Number_of_Participants~Company+Fiscal_Year,data=temp12,FUN=length)
+temp13 <- temp13[order(temp13$Company),]
+head(temp13)
+```
+
+- Now we will plot the no of participants for each fiscal year for our 18 companies
+
+```{r}
+
+
+
+g0 <- (ggplot(
+data = temp13,
+aes(
+x = Fiscal_Year,
+y = Number_of_Participants,
+group = Company,
+
+color = Company
+)
+) +
+geom_line(size=1) +
+scale_linetype_manual(values = seq(1, 19)) +
+scale_shape_manual(values = seq(1, 19)))
+
+
+g0 + labs(y = "Frequency of Events",x="Fiscal Year",title="Number of Events per year",subtitle="For Companies having potential to increase contribution",caption="Based on data from teams file") +guides(fill=TRUE)+ theme_classic()
+
+
+```
+
+```{r}
+
+g1 <- (ggplot(
+data = temp13[1:17, ],
+aes(
+x = Fiscal_Year,
+y = Number_of_Participants,
+group = Company,
+colour = Company
+)
+) +
+geom_line(aes(linetype = Company), size = 1) +
+geom_point(aes(shape = Company, size = 2)) +
+scale_linetype_manual(values = seq(1, 19)) +
+scale_shape_manual(values = seq(1, 19)))
+g1 + labs(y = "Frequency of Events",x="Fiscal Year",title="Number of Events per year",subtitle="For Companies having potential to increase contribution",caption="Based on data from teams file") +guides(fill=TRUE)
+
+
+g2 <- (ggplot(
+data = temp13[18:33, ],
+aes(
+x = Fiscal_Year,
+y = Number_of_Participants,
+group = Company,
+colour = Company
+)
+) +
+geom_line(aes(linetype = Company), size = 1) +
+geom_point(aes(shape = Company, size = 2)) +
+scale_linetype_manual(values = seq(1, 19)) +
+scale_shape_manual(values = seq(1, 19)))
+g2 + labs(y = "Frequency of Events",x="Fiscal Year",title="Number of Events per year",subtitle="For Companies having potential to increase contribution",caption="Based on data from teams file") +guides(fill=TRUE)
+
+
+g3 <- (ggplot(
+data = temp13[34:49, ],
+aes(
+x = Fiscal_Year,
+y = Number_of_Participants,
+group = Company,
+colour = Company
+)
+) +
+geom_line(aes(linetype = Company), size = 1) +
+geom_point(aes(shape = Company, size = 2)) +
+scale_linetype_manual(values = seq(1, 19)) +
+scale_shape_manual(values = seq(1, 19)))
+g3 + labs(y = "Frequency of Events",x="Fiscal Year",title="Number of Events per year",subtitle="For Companies having potential to increase contribution",caption="Based on data from teams file") +guides(fill=TRUE)
+
+
+g4 <- (ggplot(
+data = temp13[50:66, ],
+aes(
+x = Fiscal_Year,
+y = Number_of_Participants,
+group = Company,
+colour = Company
+)
+) +
+geom_line(aes(linetype = Company), size = 1) +
+geom_point(aes(shape = Company, size = 2)) +
+scale_linetype_manual(values = seq(1, 19)) +
+scale_shape_manual(values = seq(1, 19)))
+
+g4 + labs(y = "Frequency of Events",x="Fiscal Year",title="Number of Events per year",subtitle="For Companies having potential to increase contribution",caption="Based on data from teams file") +guides(fill=TRUE)
+
+```
+
+
+
+# What occupations were responsible for most of our fundraising?
+```{r}
+#import teams data
+participantbike_clean = read.csv("participantbike_clean.csv")
+#summary(participantbike_clean)
+participantbike_clean <- subset(participantbike_clean, select = -c(X))
+#colnames(participantbike_clean)
+#change everything text to lowercase
+
+participantbike_clean[, c(1, 3, 5, 6, 8, 11, 13, 14, 15, 16, 17, 23, 24, 25, 26, 27, 28,29,31,33,36,37,38,39)] <- sapply(participantbike_clean[, c(1, 3, 5, 6, 8, 11, 13, 14, 15, 16, 17, 23, 24, 25, 26, 27, 28,29,31,33,36,37,38,39)], tolower)
+
+#head(participantbike_clean)
+
+#top80eventsdf contains best events,extraing those event id, then finding the occupation and performing an aggregation 
+#will help us answer this question
+
+temp15 <- participantbike_clean$Event_ID %in% top80eventsdf$Event_ID
+temp16 <- participantbike_clean[temp15,]
+#dim(temp16)
+
+#colnames(temp16)
+#extracting only occupations,team_division,total
+temp17 <- temp16[,c(18,21,22,25,32,33)]
+
+occupation_count <- plyr::count(temp17,"Participant_Occupation")
+occupation_count_df <- as.data.frame(occupation_count)
+#Since some occupation could be of different type but belong to same set,use fuzzy matching
+
+df1<-occupation_count$Participant_Occupation
+df2<-occupation_count$Participant_Occupation
+df1 <- as.data.frame(df1)
+df2 <- as.data.frame(df2)
+df1$names_from_df2 <- " "
+names(df1) <- c("Participant_Occupation","names_from_df2")
+#colnames(df1)
+names(df2) <- c("Participant_Occupation")
+#dim(df1)
+#dim(df2)
+yournewvector <- lapply(df1$Participant_Occupation,agrep,df2$Participant_Occupation,max.distance=0.2)
+#yournewvector
+
+#write.csv(df2, file="df2.csv", row.names=FALSE)
+
+#It is not very useful in our case
+```
+
+```{r}
+occupation_count <- occupation_count[order(-occupation_count$freq),]
+occupation_count_gg <- occupation_count[order(-occupation_count$freq),]
+temp19 <- occupation_count_gg[2:7,] #top 5 except unknown
+p<- ggplot(data=temp19, aes(x = reorder( Participant_Occupation,freq), y = freq,fill=Participant_Occupation )) + geom_bar(stat ='identity')
+p + coord_flip() + labs(y = "Frequency",x="Occupation of participants",title="Most common Occupation of participants",subtitle="For events which acieved more than 80% of fundraising goal",caption="Based on data from participants file") +guides(fill=FALSE)
+```
+```{r}
+occupation_count_forall <- plyr::count(participantbike_clean,"Participant_Occupation")
+occupation_count_forall <- occupation_count_forall[order(-occupation_count_forall$freq),]
+
+p<- ggplot(data=occupation_count_forall[2:7,], aes(x = reorder( Participant_Occupation,freq), y = freq,fill=Participant_Occupation )) + geom_bar(stat ='identity')
+p + coord_flip() + labs(y = "Count",x="Occupation of participants",title="Most common Occupation of participants",subtitle="For all events",caption="Based on data from participants file") +guides(fill=FALSE)
+```
+
+
+
+- Engineering,  Healthcare , IT, Sales, Management & Education
+
+
+# common attributes in top performing corporate teams
+```{r}
+df5 <- teamsbike_clean[, c(3, 10, 14)]
+#unique(df5$Team_Division)
+#dim(df5)
+#colnames(df5)
+temp20 <- df5[df5$Team_Division == 'corporate', ]
+
+#head(temp20)
+
+temp21 <- temp20[order(-temp20$Team_Total_Confirmed), ]
+
+top50corpteams <- head(temp21, 50)
+
+temp22 <-
+participantbike_clean[participantbike_clean$Event_ID %in%  top50corpteams$Event_ID, ]
+
+#head(temp22)
+```
+
+- by type
+```{r}
+
+temp23 <- plyr::count(temp22,"Participation_Type_Name")
+
+temp23 <- temp23[order(-temp23$freq),]
+
+#colnames(temp23)
+
+p1<- ggplot(data=head(temp23[order(-temp23$freq),]), aes(x = reorder( Participation_Type_Name,freq), y = freq,fill=Participation_Type_Name )) + geom_bar(stat ='identity')
+
+p1 + coord_flip()+labs(y = "Frequency",x="Participation Type",title="Most common type of participants",subtitle="For top 50 corporate teams",caption="Based on data from participants & teams file") +guides(fill=FALSE)
+```
+
+- by occupation
+
+```{r}
+
+temp24 <- plyr::count(temp22,"Participant_Occupation")
+temp24 <- temp24[order(-temp24$freq),]
+temp25 <- temp24[!temp24$Participant_Occupation=='unknown',]
+p2<- ggplot(data=head(temp25), aes(x = reorder( Participant_Occupation,freq), y = freq,fill=Participant_Occupation )) + geom_bar(stat ='identity')
+p2 + coord_flip() + labs(y = "Frequency",x="Occupation of participants",title="Most common Occupation of participants",subtitle="For top 50 corporate teams(excluding unknown occupation)",caption="Based on data from participantsbike file") + guides(fill=FALSE)
+```
+
+- by connectiontoms
+
+```{r}
+temp26 <- plyr::count(temp22,"Participant_Connection_to_MS")
+temp26 <- temp26[order(-temp26$freq),]
+p3<- ggplot(data=head(temp26), aes(x = reorder(Participant_Connection_to_MS,freq), y = freq,fill=Participant_Connection_to_MS )) + geom_bar(stat ='identity')
+p3 + coord_flip() +labs(y = "Frequency",x="Connection to MS",title="What drive corporate participants towards MS events",subtitle="For top 50 corporate teams",caption="Based on data from participants & teams file") + guides(fill=FALSE)
+```
+- by State
+
+```{r}
+temp27 <- plyr::count(temp22,"Address_._Participant_State.Province")
+temp27 <- temp27[order(-temp27$freq),]
+p4<- ggplot(data=head(temp27), aes(x = reorder(Address_._Participant_State.Province,freq), y = freq,fill=Address_._Participant_State.Province )) + geom_bar(stat ='identity')
+p4 + coord_flip()+labs(y = "Frequency",x="States",title="Where most corporate events occur?",subtitle="For top 50 corporate teams",caption="Based on data from participants & teams file") + guides((fill=FALSE))
+```
+
+- by registration type
+
+```{r}
+temp28 <- plyr::count(temp22,"Registration_Type")
+temp28 <- temp28[order(-temp28$freq),]
+#table(temp28)
+p5<- ggplot(data=head(temp28), aes(x = reorder(Registration_Type,freq), y = freq,fill=Registration_Type )) + geom_bar(stat ='identity')
+p5 + labs(y = "Count",x="Registration Type",title="Which type of registration is preferred by corporate participants",subtitle="For top 50 corporate teams",caption="Based on data from participants file")+guides(fill=FALSE)
+```
+
+- by gender
+
+```{r}
+temp29 <- plyr::count(temp22,"Participant_Gender")
+temp29 <- temp29[order(-temp29$freq),]
+#table(temp29)
+p6<- ggplot(data=head(temp29), aes(x = reorder(Participant_Gender,freq), y = freq,fill=Participant_Gender )) + geom_bar(stat ='identity')
+p6 + labs(y = "Count",x="Gender",title="Distribution of Gender of particiapnts",subtitle="For top 50 corporate teams",caption="Based on data from participant file")+guides(fill=FALSE)
+```
+
+- by industry including unknown occupation
+
+```{r}
+
+temp32 <- plyr::count(participantbike_clean, "Industry")
+temp32 <- temp32[order(-temp32$freq), ]
+p8 <- ggplot(data = head(temp32), aes(x = reorder(Industry, freq), y = freq, fill = Industry)) + geom_bar(stat = "identity")
+p8 + coord_flip() +labs(y = "Frequency",x="Industry",title="Which industries attracts most participants",subtitle="For all events (including unknown occupation)",caption="Based on data from participants file")+guides(fill=FALSE)
+
+```
+
+- by industry excluding unknown occupation
+
+```{r}
+temp33 <-   filter(participantbike_clean,!Participant_Occupation == "unknown")
+#dim(temp33)
+temp34 <- plyr::count(temp33, "Industry")
+temp34 <- temp34[order(-temp34$freq), ]
+p9 <- ggplot(data = head(temp34), aes(x = reorder(Industry, freq), y = freq, fill = Industry)) + geom_bar(stat = "identity")
+p9 + coord_flip()  +labs(y = "Frequency",x="Industry",title="Which industries attracts most participants",subtitle="For all events (excluding unknown occupation)",caption="Based on data from participants file")+guides(fill=FALSE)
+```
+
+
+- in events data checking average team size for top corporate teams
+
+```{r}
+temp30 <- eventsbike_clean[eventsbike_clean$Event_ID %in% top50corpteams$Event_ID,]
+#head(temp30)
+temp31 <- plyr::count(temp30,"Average_Team_Size")
+
+p7<- ggplot(data=head(temp31), aes(x = reorder(Average_Team_Size,freq), y = freq,fill=Average_Team_Size )) + geom_bar(stat ='identity')
+p7  +labs(y = "Frequency",x="Team size",title="Average team size of participants",subtitle="For top 50 corporate teams",caption="Based on data from events file")+guides(fill=FALSE)
+```
+
+# Assessing competitive events
+
+- Bestbuddies Boston Hynnais port
+- Bestbuddies San Simone - no presence of MS
+
+
+```{r}
+
+#colnames(participantbike_clean)
+#df for events having in miami
+florida <- participantbike_clean[participantbike_clean$Address_._Participant_State.Province=="fl",]
+temp100 <- grep("*miami*",florida$Address_._Participant_City)
+miami <- florida[temp100,]
+#df for events in boston
+boston <- participantbike_clean[participantbike_clean$Address_._Participant_City == "boston",]
+bestbuddies <- rbind(miami,boston)
+mean(bestbuddies$Total_Not_From_Participant)
+mean(bestbuddies$Number_Not_From_Participant)
+
+#df for st louis
+mo <- participantbike_clean[participantbike_clean$Address_._Participant_State.Province=="mo",]
+temp101 <- grep("*st. louis*",mo$Address_._Participant_City)
+st_louis <- mo[temp101,]
+#df for san diego
+sandiego <- participantbike_clean[participantbike_clean$Address_._Participant_City == "san diego",]
+
+pedalthecause <- rbind(st_louis,sandiego)
+
+sum(pedalthecause$Total_of_All_Confirmed_Gifts)
+
+
+
+
+```
+
+MS society vs bestbuddies
+raised average $616 by participant (which does not include their own contribution) 
+
+ms vs pealthecause
+1808037 donatons received
+```{r}
+donations <- read.csv("donations2013_2017.csv")
+
+alldonors <- length(unique(donations$Donor_Member_ID))
+alldonors
+
+temp500 <- donations[,c('Donor_Member_ID','Fiscal_Year')]
+#colnames(temp500)
+
+uniqueindex <- as.numeric(rownames(unique(temp500)[1])) 
+
+temp501 <- temp500[uniqueindex,]
+
+#temp502 <- aggregate(Donor_Member_ID~Fiscal_Year,data=temp501,FUN=length)
+temp502 <- aggregate(Donor_Member_ID~Fiscal_Year,data=donations,FUN=length)
+p9<- ggplot(data=temp502[2:6,], aes(x = Fiscal_Year, y = Donor_Member_ID,fill= Fiscal_Year )) + geom_bar(stat ='identity')
+options(scipen=1000000)
+p9  +labs(y = "Number of Unique Donors",x=" Fiscal Year",title="Distribution of Unique Donors",subtitle="For events since 2013",caption="Based on data from donations file")+guides(fill=FALSE)
+
+
+```
+```{r}
+
+
+#(teamsbike_clean$Number_of_Participants)
+
+temp503 <- aggregate(Number_of_Participants~Fiscal_Year,data=teamsbike_clean,FUN=sum)
+p10<- ggplot(data=temp503, aes(x = Fiscal_Year, y = Number_of_Participants,fill= Fiscal_Year )) + geom_bar(stat ='identity')
+options(scipen=1000000)
+p10  +labs(y = "Number of Participants",x=" Fiscal Year",title="Distribution of Participants",subtitle="For events since 2013",caption="Based on data from teams file")+guides(fill=FALSE)
+
+
+
+```
+
+```{r}
+temp502 <- temp502[2:6,]
+temp503 <- temp503[1:5,]
+names(temp502) <- c("Fiscal_Year","Number_of_Donors")
+
+Fiscal_Year<- temp502$Fiscal_Year
+
+donor_participant_ratio <- temp502$Number_of_Donors/temp503$Number_of_Participants
+
+
+
+temp504 <- data.frame(Fiscal_Year,donor_participant_ratio)
+
+temp504
+
+
+p11<- ggplot(data=temp504, aes(x = Fiscal_Year, y = donor_participant_ratio,fill= Fiscal_Year )) + geom_bar(stat ='identity')
+options(scipen=1000000)
+p11  +labs(y = "Number of donor for each participant",x=" Fiscal Year",title="Donors per participant",subtitle="For events since 2013",caption="Based on data from teams and donations file")+guides(fill=FALSE)
+
+
+```
+
+Bestbuddies
+raised $2553
+13 donors
+
+pedalthecause
+81000 donars
+19809668 total donation
+
+pelotonia
+157751378$ raised since 2009
+1362303 since in 2018
+156389075 2009-2017
+$ 19548634 per year
+
+pan mass challenge 2017(http://archive.boston.com/news/local/gallery/080407PanMassChallenge?pg=2)
+
+5000 riders
